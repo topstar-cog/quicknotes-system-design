@@ -1,0 +1,84 @@
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  padding: 24px;
+  font-family: Arial, sans-serif;
+  line-height: 1.6;
+  background: #f4f7fb;
+  color: #243047;
+}
+
+.container {
+  max-width: 760px;
+  margin: 0 auto;
+  padding: 24px;
+  background: white;
+  border-radius: 12px;
+}
+
+h1, h2 {
+  color: #174ea6;
+}
+
+label {
+  display: block;
+  margin-top: 14px;
+  font-weight: bold;
+}
+
+input, textarea {
+  display: block;
+  width: 100%;
+  margin-top: 5px;
+  padding: 10px;
+  font: inherit;
+  border: 1px solid #b8c2d1;
+  border-radius: 6px;
+}
+
+button {
+  margin-top: 12px;
+  padding: 10px 16px;
+  border: 0;
+  border-radius: 6px;
+  background: #174ea6;
+  color: white;
+  cursor: pointer;
+}
+
+button:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+#status {
+  padding: 10px;
+  border-radius: 6px;
+  background: #eef2f7;
+}
+
+#status.success {
+  color: #176b36;
+  background: #e7f6ec;
+}
+
+#status.error {
+  color: #a61b1b;
+  background: #fdecec;
+}
+
+.note {
+  margin: 14px 0;
+  padding: 14px;
+  border: 1px solid #d9e0ea;
+  border-radius: 8px;
+  overflow-wrap: anywhere;
+}
+
+.note h3 {
+  margin-top: 0;
+}
