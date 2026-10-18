@@ -1,4 +1,3 @@
-
 const API_URL = "https://jsonplaceholder.typicode.com/posts";
 
 const loadButton = document.getElementById("load-btn");
@@ -10,6 +9,12 @@ const notesList = document.getElementById("notes-list");
 const statusMessage = document.getElementById("status");
 
 let notes = [];
+let nextClientId = 0;
+
+function createClientId() {
+  nextClientId += 1;
+  return `note-${Date.now()}-${nextClientId}`;
+}
 
 function showStatus(message, type = "") {
   statusMessage.textContent = message;
@@ -19,6 +24,9 @@ function showStatus(message, type = "") {
 function setBusy(isBusy) {
   loadButton.disabled = isBusy;
   submitButton.disabled = isBusy;
+  notesList.querySelectorAll("button").forEach(button => {
+    button.disabled = isBusy;
+  });
 }
 
 async function request(url, options = {}) {
@@ -58,10 +66,10 @@ function renderNotes() {
 
     const deleteButton = document.createElement("button");
     deleteButton.type = "button";
+    deleteButton.className = "note-delete-button";
     deleteButton.textContent = "Delete";
-
     deleteButton.addEventListener("click", () => {
-      deleteNote(note.id, deleteButton);
+      deleteNote(note, deleteButton);
     });
 
     item.append(heading, body, deleteButton);
@@ -75,7 +83,14 @@ async function loadNotes() {
 
   try {
     const result = await request(`${API_URL}?_limit=10`);
-    notes = result.data || [];
+    if (!Array.isArray(result.data)) {
+      throw new Error("The API returned an unexpected response.");
+    }
+
+    notes = result.data.map(note => ({
+      ...note,
+      clientId: createClientId()
+    }));
     renderNotes();
     showStatus(`Loaded ${notes.length} notes.`, "success");
   } catch (error) {
@@ -114,6 +129,11 @@ async function createNote(event) {
     });
 
     const createdNote = result.data;
+    if (!createdNote || createdNote.id == null) {
+      throw new Error("The API did not return a note ID.");
+    }
+
+    createdNote.clientId = createClientId();
     notes.unshift(createdNote);
     renderNotes();
     noteForm.reset();
@@ -129,22 +149,24 @@ async function createNote(event) {
   }
 }
 
-async function deleteNote(id, button) {
+async function deleteNote(note, button) {
+  setBusy(true);
   button.disabled = true;
   button.textContent = "Deleting...";
 
   try {
-    await request(`${API_URL}/${encodeURIComponent(id)}`, {
+    await request(`${API_URL}/${encodeURIComponent(note.id)}`, {
       method: "DELETE"
     });
 
-    notes = notes.filter(note => String(note.id) !== String(id));
+    notes = notes.filter(item => item.clientId !== note.clientId);
     renderNotes();
-    showStatus(`Note ${id} deleted.`, "success");
+    showStatus(`Note ${note.id} deleted.`, "success");
   } catch (error) {
     showStatus(`Unable to delete note: ${error.message}`, "error");
-    button.disabled = false;
-    button.textContent = "Delete";
+    renderNotes();
+  } finally {
+    setBusy(false);
   }
 }
 

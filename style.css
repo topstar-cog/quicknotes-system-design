@@ -18,6 +18,7 @@ body {
   padding: 24px;
   background: white;
   border-radius: 12px;
+  box-shadow: 0 8px 24px rgb(36 48 71 / 8%);
 }
 
 h1, h2 {
@@ -55,6 +56,22 @@ button:disabled {
   cursor: not-allowed;
 }
 
+button:hover:not(:disabled) {
+  background: #123d82;
+}
+
+button:focus-visible,
+input:focus-visible,
+textarea:focus-visible {
+  outline: 3px solid #f4a340;
+  outline-offset: 2px;
+}
+
+input:focus,
+textarea:focus {
+  border-color: #174ea6;
+}
+
 #status {
   padding: 10px;
   border-radius: 6px;
@@ -81,4 +98,19 @@ button:disabled {
 
 .note h3 {
   margin-top: 0;
+}
+
+#notes-list {
+  padding-left: 0;
+  list-style: none;
+}
+
+@media (max-width: 520px) {
+  body {
+    padding: 12px;
+  }
+
+  .container {
+    padding: 18px;
+  }
 }

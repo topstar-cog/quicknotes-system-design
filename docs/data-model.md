@@ -1,336 +1,142 @@
+# QuickNotes data model
 
+## Database choice
 
-\# QuickNotes Data Model
+PostgreSQL is a good default for users, notes, and tags because these records have clear relationships and benefit from transactions, constraints, and joins. A different database could be added later for a specific workload, but the core records fit a relational model.
 
+## Tables and relationships
 
+- A user can own many notes and many tags.
+- A note can have many tags, and a tag can be attached to many notes. The `note_tags` table represents this many-to-many relationship.
+- Every association must connect a note and a tag owned by the same user.
 
-\## 1. Database Choice
-
-
-
-QuickNotes will use a relational SQL database such as PostgreSQL. Users, notes and tags have clear relationships, and the system needs referential integrity, transactions and reliable joins. SQL also supports indexing and structured queries for retrieving notes and their tags.
-
-
-
-A NoSQL database could be useful for some high-volume, flexible workloads, but SQL is the better default for this application's core data because the relationships and consistency requirements are well defined.
-
-
-
-\## 2. Entities and Columns
-
-
-
-\### Users
-
-
-
-| Column | Type | Key / constraint |
-
-|---|---|---|
-
-| id | BIGINT | Primary key, generated |
-
-| username | VARCHAR(50) | Unique, not null |
-
-| email | VARCHAR(255) | Unique, not null |
-
-| password\_hash | VARCHAR(255) | Not null |
-
-| created\_at | TIMESTAMPTZ | Not null |
-
-
-
-Passwords must be stored as secure password hashes, never as plain text.
-
-
-
-\### Notes
-
-
-
-| Column | Type | Key / constraint |
-
-|---|---|---|
-
-| id | BIGINT | Primary key, generated |
-
-| user\_id | BIGINT | Foreign key to users.id, not null |
-
-| title | VARCHAR(100) | Not null |
-
-| body | TEXT | Nullable |
-
-| created\_at | TIMESTAMPTZ | Not null |
-
-| updated\_at | TIMESTAMPTZ | Not null |
-
-
-
-\### Tags
-
-
-
-| Column | Type | Key / constraint |
-
-|---|---|---|
-
-| id | BIGINT | Primary key, generated |
-
-| user\_id | BIGINT | Foreign key to users.id, not null |
-
-| name | VARCHAR(50) | Not null |
-
-| created\_at | TIMESTAMPTZ | Not null |
-
-
-
-A tag name is unique within a user's account.
-
-
-
-\### Note\_tags
-
-
-
-| Column | Type | Key / constraint |
-
-|---|---|---|
-
-| note\_id | BIGINT | Part of composite primary key; foreign key to notes.id |
-
-| tag\_id | BIGINT | Part of composite primary key; foreign key to tags.id |
-
-
-
-The pair `(note\_id, tag\_id)` must be unique.
-
-
-
-\## 3. Relationships
-
-
-
-\- \*\*Users to notes — one-to-many:\*\* one user can own many notes, while each note belongs to one user.
-
-\- \*\*Users to tags — one-to-many:\*\* one user can create many tags, while each tag belongs to one user.
-
-\- \*\*Notes to tags — many-to-many:\*\* a note can have several tags, and a tag can be assigned to several notes. The `note\_tags` junction table implements this relationship.
-
-
-
-The design should enforce ownership so users cannot associate their notes with tags belonging to other users.
-
-
-
-\## 4. SQL Table Definitions
-
-
-
-The following examples use PostgreSQL.
-
-
+## PostgreSQL table definitions
 
 ```sql
-
 CREATE TABLE users (
-
-&#x20;   id BIGINT GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
-
-&#x20;   username VARCHAR(50) NOT NULL UNIQUE,
-
-&#x20;   email VARCHAR(255) NOT NULL UNIQUE,
-
-&#x20;   password\_hash VARCHAR(255) NOT NULL,
-
-&#x20;   created\_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT\_TIMESTAMP
-
+    id BIGINT GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+    username VARCHAR(50) NOT NULL UNIQUE,
+    email VARCHAR(255) NOT NULL UNIQUE,
+    password_hash VARCHAR(255) NOT NULL,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP
 );
-
-
 
 CREATE TABLE notes (
-
-&#x20;   id BIGINT GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
-
-&#x20;   user\_id BIGINT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
-
-&#x20;   title VARCHAR(100) NOT NULL,
-
-&#x20;   body TEXT,
-
-&#x20;   created\_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT\_TIMESTAMP,
-
-&#x20;   updated\_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT\_TIMESTAMP
-
+    id BIGINT GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+    user_id BIGINT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    title VARCHAR(100) NOT NULL CHECK (char_length(trim(title)) BETWEEN 1 AND 100),
+    body TEXT,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    UNIQUE (user_id, id)
 );
-
-
 
 CREATE TABLE tags (
-
-&#x20;   id BIGINT GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
-
-&#x20;   user\_id BIGINT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
-
-&#x20;   name VARCHAR(50) NOT NULL,
-
-&#x20;   created\_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT\_TIMESTAMP,
-
-&#x20;   UNIQUE (user\_id, name)
-
+    id BIGINT GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+    user_id BIGINT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    name VARCHAR(50) NOT NULL CHECK (char_length(trim(name)) BETWEEN 1 AND 50),
+    created_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    UNIQUE (user_id, name),
+    UNIQUE (user_id, id)
 );
 
-
-
-CREATE TABLE note\_tags (
-
-&#x20;   note\_id BIGINT NOT NULL REFERENCES notes(id) ON DELETE CASCADE,
-
-&#x20;   tag\_id BIGINT NOT NULL REFERENCES tags(id) ON DELETE CASCADE,
-
-&#x20;   PRIMARY KEY (note\_id, tag\_id)
-
+CREATE TABLE note_tags (
+    user_id BIGINT NOT NULL,
+    note_id BIGINT NOT NULL,
+    tag_id BIGINT NOT NULL,
+    PRIMARY KEY (note_id, tag_id),
+    FOREIGN KEY (user_id, note_id)
+        REFERENCES notes(user_id, id) ON DELETE CASCADE,
+    FOREIGN KEY (user_id, tag_id)
+        REFERENCES tags(user_id, id) ON DELETE CASCADE
 );
-
 ```
 
+The composite foreign keys on `note_tags` ensure that the note and tag belong to the same user. The extra `(user_id, id)` unique constraints provide valid referenced keys even though `id` is already the primary key. Passwords must be stored as secure password hashes, never as plain text.
 
+`updated_at` gets its initial value from the default, but a default does not update the value on later edits. The application or a database trigger must set it whenever a note changes.
 
-\## 5. Example SQL Queries
+## Example queries
 
+The value `:current_user_id` below is supplied by trusted server code after authentication, not accepted from an untrusted query parameter.
 
-
-\### Query 1: List a user's newest notes
-
-
+List the newest notes with a stable order:
 
 ```sql
-
-SELECT id, title, body, created\_at
-
+SELECT id, title, body, created_at, updated_at
 FROM notes
-
-WHERE user\_id = 7
-
-ORDER BY created\_at DESC
-
+WHERE user_id = :current_user_id
+ORDER BY created_at DESC, id DESC
 LIMIT 10;
-
 ```
 
-
-
-\### Query 2: Retrieve notes with their tags (JOIN)
-
-
+Retrieve a user's notes and their tags:
 
 ```sql
-
-SELECT n.id, n.title, t.name AS tag\_name
-
+SELECT n.id, n.title, t.name AS tag_name
 FROM notes AS n
-
-LEFT JOIN note\_tags AS nt ON nt.note\_id = n.id
-
-LEFT JOIN tags AS t ON t.id = nt.tag\_id
-
-WHERE n.user\_id = 7
-
+LEFT JOIN note_tags AS nt
+  ON nt.user_id = n.user_id AND nt.note_id = n.id
+LEFT JOIN tags AS t
+  ON t.user_id = nt.user_id AND t.id = nt.tag_id
+WHERE n.user_id = :current_user_id
 ORDER BY n.id;
-
 ```
 
-
-
-In a real API, the user ID must come from the authenticated session or token, not from an untrusted client parameter.
-
-
-
-\### Query 3: Count notes per user
-
-
+Count notes per user:
 
 ```sql
-
-SELECT u.id, u.username, COUNT(n.id) AS note\_count
-
+SELECT u.id, u.username, COUNT(n.id) AS note_count
 FROM users AS u
-
-LEFT JOIN notes AS n ON n.user\_id = u.id
-
+LEFT JOIN notes AS n ON n.user_id = u.id
 GROUP BY u.id, u.username
-
-ORDER BY note\_count DESC;
-
+ORDER BY note_count DESC;
 ```
 
+## Indexes and search
 
-
-\### Query 4: Find notes containing a word
-
-
+The primary keys and unique constraints create indexes automatically. This index supports retrieving one user's newest notes in the same order used above:
 
 ```sql
+CREATE INDEX idx_notes_user_created_id
+ON notes (user_id, created_at DESC, id DESC);
+```
 
+The `note_tags` primary key starts with `note_id`, so add an index beginning with `tag_id` for reverse lookups:
+
+```sql
+CREATE INDEX idx_note_tags_tag_id
+ON note_tags (tag_id);
+```
+
+A normal B-tree index does not speed up a search such as `ILIKE '%meeting%'`. For basic PostgreSQL full-text search across title and body, one option is a GIN expression index:
+
+```sql
+CREATE INDEX idx_notes_search
+ON notes USING GIN (
+    to_tsvector('english', coalesce(title, '') || ' ' || coalesce(body, ''))
+);
+```
+
+The query must use the same expression and still restrict results to the authenticated user:
+
+```sql
 SELECT id, title, body
-
 FROM notes
-
-WHERE user\_id = 7
-
-&#x20; AND title ILIKE '%meeting%';
-
+WHERE user_id = :current_user_id
+  AND to_tsvector('english', coalesce(title, '') || ' ' || coalesce(body, ''))
+      @@ plainto_tsquery('english', :search_text)
+ORDER BY created_at DESC, id DESC
+LIMIT 10;
 ```
 
+Indexes improve reads but consume storage and add write overhead. Add them for measured query patterns, and review query plans as data grows.
 
+## Integrity and security
 
-\## 6. Indexes
-
-
-
-```sql
-
-CREATE INDEX idx\_notes\_user\_created
-
-ON notes (user\_id, created\_at DESC);
-
-```
-
-
-
-This index helps retrieve a user's most recent notes efficiently. The `user\_id` filter comes first, followed by the sort order. The foreign key on `note\_tags.note\_id` is already supported by its composite primary key; an additional index on `tag\_id` can help queries that start from a tag.
-
-
-
-```sql
-
-CREATE INDEX idx\_note\_tags\_tag
-
-ON note\_tags (tag\_id);
-
-```
-
-
-
-Indexes improve reads but consume storage and add overhead to inserts, updates and deletes, so they should be chosen for actual query patterns.
-
-
-
-\## 7. Data Integrity and Security
-
-
-
-\- Foreign keys prevent orphaned notes and tag associations.
-
-\- Cascading deletes remove dependent records when a user, note or tag is deleted.
-
-\- Unique constraints prevent duplicate usernames, emails and tag names within one user account.
-
-\- Application validation must enforce a non-empty title of no more than 100 characters.
-
-\- Authorization must verify note and tag ownership for every operation.
-
-\- Use parameterized queries and secure password hashing.
-
-
-
+- Foreign keys prevent orphaned notes, tags, and associations.
+- Cascading deletes remove dependent records when a user, note, or tag is deleted.
+- Unique constraints prevent duplicate usernames, emails, and tag names per user.
+- Constraints and server-side validation enforce non-empty titles and tag names.
+- Authorization must verify ownership on every read and write.
+- Parameterized queries prevent user input from being treated as SQL code.

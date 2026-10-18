@@ -1,336 +1,138 @@
+# QuickNotes system architecture
 
+## 1. Overview
 
-\# QuickNotes System Architecture
+The browser demo calls JSONPlaceholder. This document describes a possible production service: a browser or mobile client calls an authenticated API, which validates requests and reads or writes persistent data. The estimates below are planning examples, not measured traffic or a promise that a particular design will meet a service target.
 
+## 2. Requirements
 
+### Functional
 
-\## 1. Overview
+- Users can register and authenticate.
+- Users can create, view, update, and delete their own notes.
+- Users can create tags and assign tags to their notes.
+- Users can search and paginate through their notes.
+- The API validates data and returns consistent responses and errors.
+- Users cannot read or change another user's private data.
+- The service records operational health and failures.
 
+### Non-functional
 
+- **Scalability:** add application instances as demand grows.
+- **Availability:** avoid depending on one application server or failure zone.
+- **Performance:** cache suitable reads and serve static assets from a CDN.
+- **Security:** use HTTPS, authentication, authorization, and protected secrets.
+- **Durability:** store data in a database with backups and tested recovery.
+- **Consistency:** write to the primary database and manage cache invalidation.
+- **Maintainability:** version the API and use tests, logs, and monitoring.
+- **Recoverability:** define and test recovery time and recovery point objectives.
 
-QuickNotes is moving from a browser-only application to an online service designed to support one million registered users. The browser client communicates with an API, which authenticates requests, validates data and accesses persistent storage. Caching, load balancing and asynchronous workers help the service handle growth.
+## 3. Example capacity estimates
 
+Assumptions:
 
+- 1,000,000 registered users.
+- 10% are active each day: 100,000 daily active users.
+- Each active user requests 50 notes per day and creates 1 note per day.
+- Each note averages 2 KB of text and metadata.
+- One day has 86,400 seconds; peak traffic is estimated at five times average.
 
-\## 2. Functional Requirements
+### Reads
 
+100,000 users × 50 note reads/day = 5,000,000 note reads/day.
 
+5,000,000 ÷ 86,400 ≈ **58 average note reads per second**. At five times average, plan for about **290 reads per second** as a starting estimate.
 
-1\. Users can register and authenticate securely.
+### Writes
 
-2\. Users can create, view, update and delete their own notes.
+100,000 users × 1 note/day = 100,000 note writes/day.
 
-3\. Users can create tags and assign tags to notes.
+100,000 ÷ 86,400 ≈ **1.16 average writes per second**. At five times average, plan for about **6 writes per second**, before edits, deletes, tags, and retries.
 
-4\. Users can search and paginate through notes.
+### Storage
 
-5\. The API validates input and returns consistent JSON responses and error codes.
+100,000 notes/day × 2 KB = 200,000 KB/day, or about 200 MB/day using decimal units. Over 365 days, that is about **73 GB/year** for note content and metadata.
 
-6\. Users cannot access or modify another user's private notes.
+This excludes indexes, backups, replicas, logs, attachments, and database overhead. Registered users are not the same as active users, and averages hide bursts. Measure actual traffic, response times, cache hit rates, and database load, then revise the estimates.
 
-7\. The service reports failures and supports operational monitoring.
-
-
-
-\## 3. Non-Functional Requirements
-
-
-
-\- \*\*Scalability:\*\* add application instances to handle growing traffic.
-
-\- \*\*Availability:\*\* avoid relying on one application server or one availability zone.
-
-\- \*\*Performance:\*\* cache frequently requested data and deliver static assets through a CDN.
-
-\- \*\*Security:\*\* use HTTPS, secure authentication, authorization and encrypted secrets.
-
-\- \*\*Durability:\*\* persist notes in a database with backups and tested recovery.
-
-\- \*\*Consistency:\*\* commit note writes to the primary database and manage cache invalidation.
-
-\- \*\*Maintainability:\*\* use versioned APIs, automated tests, logs and monitoring.
-
-\- \*\*Recoverability:\*\* define recovery time and recovery point objectives and test failover procedures.
-
-
-
-\## 4. Load Estimates for One Million Users
-
-
-
-These are planning estimates, not measured production traffic.
-
-
-
-\### Assumptions
-
-
-
-\- 1,000,000 registered users.
-
-\- 10% are active daily: 100,000 daily active users.
-
-\- Each active user reads 50 notes or feed items per day.
-
-\- Each active user creates 1 note per day.
-
-\- Each note averages 2 KB of text and metadata.
-
-\- Use 86,400 seconds per day for average request-rate calculations.
-
-\- Storage estimate excludes indexes, backups, replication, logs and database overhead.
-
-
-
-\### Reads per second
-
-
-
-100,000 active users × 50 reads/day = 5,000,000 reads/day.
-
-
-
-5,000,000 ÷ 86,400 ≈ \*\*58 average reads per second\*\*.
-
-
-
-For capacity planning, if peak traffic is five times the average, plan for approximately \*\*290 reads per second\*\* initially.
-
-
-
-\### Writes per second
-
-
-
-100,000 active users × 1 note/day = 100,000 note writes/day.
-
-
-
-100,000 ÷ 86,400 ≈ \*\*1.16 average note writes per second\*\*.
-
-
-
-At five times the average, plan for approximately \*\*6 writes per second\*\*, before accounting for edits, deletes, tags and retries.
-
-
-
-\### Storage per year
-
-
-
-100,000 notes/day × 2 KB = 200,000 KB/day, approximately 200 MB/day using decimal units.
-
-
-
-200 MB/day × 365 ≈ \*\*73 GB/year\*\* of new note content and metadata.
-
-
-
-This estimate is only for note records. Attachments, indexes, audit logs, backups, replicas and operational overhead can increase storage substantially.
-
-
-
-\### Capacity caveat
-
-
-
-Registered users are not the same as active users, and averages hide traffic bursts. Monitor real request rates, response times, cache hit rates and database load, then revise the estimates as actual usage becomes available.
-
-
-
-\## 5. Architecture Diagram
-
-
+## 4. Logical architecture
 
 ```text
-
-&#x20;                    Users / Browser
-
-&#x20;                           |
-
-&#x20;                          DNS
-
-&#x20;                           |
-
-&#x20;                    CDN (static assets)
-
-&#x20;                           |
-
-&#x20;                     Load Balancer
-
-&#x20;                      /          \\
-
-&#x20;                App Server 1   App Server 2
-
-&#x20;                      \\          /
-
-&#x20;                       API Service
-
-&#x20;                      /     |      \\
-
-&#x20;                   Cache  Primary DB  Queue
-
-&#x20;                     |        |        |
-
-&#x20;                   Reads   Read Replica Worker
-
-&#x20;                                 ^       |
-
-&#x20;                                 |       |
-
-&#x20;                             DB replication
-
-&#x20;                                         |
-
-&#x20;                                   Background jobs
-
+                         +-------------------+
+                         |   User / Browser  |
+                         +---------+---------+
+                                   |
+                                  DNS
+                           ________|________
+                          /                 \
+              Static asset requests      API requests
+                        |                    |
+                      CDN              Load balancer
+                                             |
+                                  +----------+----------+
+                                  |                     |
+                              App server            App server
+                                  |                     |
+                                  +----------+----------+
+                                             |
+                                         API service
+                                   _________|_________
+                                  /         |         \
+                              Cache    Primary DB    Queue
+                                          |             |
+                                    Read replica      Worker
 ```
 
-
-
-The diagram is logical: the production deployment should use managed, redundant services and secure network connections. The worker reads queued jobs and writes results to the database or object storage where needed.
-
-
-
-\## 6. Components and the Problems They Solve
-
-
-
-\- \*\*Client/browser:\*\* provides the user interface for creating, viewing, editing and deleting notes.
-
-\- \*\*DNS:\*\* translates the public service domain into the appropriate network destination.
-
-\- \*\*CDN:\*\* serves cached static files close to users, reducing origin traffic and latency.
-
-\- \*\*Load balancer:\*\* distributes incoming API traffic across healthy application instances.
-
-\- \*\*App Server 1 and App Server 2:\*\* run the API so requests can continue if one instance fails and capacity can be increased horizontally.
-
-\- \*\*API service:\*\* validates requests, authenticates users, enforces authorization and applies business rules.
-
-\- \*\*Cache:\*\* stores frequently accessed data to reduce repeated database reads and improve response times.
-
-\- \*\*Primary database:\*\* accepts authoritative writes and maintains transactional data integrity.
-
-\- \*\*Read replica:\*\* serves eligible read queries to reduce load on the primary database.
-
-\- \*\*Queue:\*\* buffers background work so slow tasks do not block normal API responses.
-
-\- \*\*Worker:\*\* processes queued tasks such as notifications, indexing or future attachment processing.
-
-\- \*\*Monitoring and alerts:\*\* detect elevated errors, latency, resource exhaustion and failed background jobs.
-
-\- \*\*Backups and recovery procedures:\*\* protect against accidental deletion, corruption and infrastructure failures.
-
-
-
-\## 7. GET /notes Request Flow
-
-
-
-1\. The browser resolves the API domain through DNS.
-
-2\. The request travels over HTTPS to the load balancer.
-
-3\. The load balancer routes it to a healthy application server.
-
-4\. The API validates the access token and identifies the user.
-
-5\. The API checks the cache using a key scoped to that user and the requested pagination or filters.
-
-6\. On a cache hit, the API returns the cached result after applying appropriate authorization rules.
-
-7\. On a cache miss, the API queries the read replica when replication freshness is acceptable; otherwise, it uses the primary database.
-
-8\. The API caches the result for a controlled period and returns a paginated JSON response.
-
-9\. Monitoring records latency, status code and relevant operational metrics without logging secrets.
-
-
-
-\## 8. POST /notes Request Flow
-
-
-
-1\. The browser submits a JSON request over HTTPS.
-
-2\. DNS resolves the service domain, and the load balancer selects a healthy application server.
-
-3\. The API authenticates the user and validates the title and body.
-
-4\. The API writes the note to the primary database in a transaction, associating it with the authenticated user.
-
-5\. After the database confirms the commit, the API invalidates or updates affected cache entries.
-
-6\. If additional work is needed, the API publishes a job to the queue; the request should not wait for non-essential background work.
-
-7\. The API returns `201 Created` with the new note and its identifier.
-
-8\. A worker processes queued work independently and retries transient failures with limits and monitoring.
-
-
-
-The database write must succeed before the API reports successful note creation. Cache invalidation and job publishing need reliable handling, such as a transactional outbox, if losing an event would cause inconsistent behavior.
-
-
-
-\## 9. Trade-Offs
-
-
-
-\### Cache freshness versus performance
-
-
-
-Caching reduces database load and response latency, but cached data can become stale. Use short, justified TTLs, invalidate affected keys after successful writes, and avoid caching private data under keys shared by different users.
-
-
-
-\### Read replicas versus consistency
-
-
-
-Read replicas distribute read traffic but may lag behind the primary database. Read-after-write operations should use the primary or a consistency-aware strategy so users can see their own recent changes.
-
-
-
-\### Asynchronous work versus immediate completion
-
-
-
-Queues keep slow processing out of the request path and absorb bursts. However, jobs can be delayed or retried. Use idempotent workers, bounded retries, dead-letter handling and queue monitoring.
-
-
-
-\### Availability versus cost
-
-
-
-Multiple instances, replicas, backups and multiple availability zones improve resilience but increase operating costs and complexity. Start with justified redundancy and scale based on measured demand and service objectives.
-
-
-
-\## 10. Avoiding Single Points of Failure
-
-
-
-\- Run at least two application instances across separate failure domains and use health checks.
-
-\- Use a highly available load balancer and redundant DNS service.
-
-\- Deploy the database with a tested failover configuration, backups and point-in-time recovery.
-
-\- Use a managed, durable queue with retry and monitoring capabilities.
-
-\- Avoid relying on one cache instance for correctness; the database remains the source of truth.
-
-\- Replicate critical data and regularly test restoration and failover.
-
-\- Monitor service health and alert on failures before they cause prolonged outages.
-
-
-
-Redundancy reduces the impact of individual failures but does not guarantee zero downtime. Recovery procedures must be tested.
-
-
-
+This is a logical diagram, not a deployment blueprint. Static asset requests go to the CDN; API requests go to the load balancer. A worker consumes queued jobs. Managed, redundant services and secure network connections would be selected for an actual deployment.
+
+## 5. Components
+
+- **DNS:** directs the service name to the appropriate public endpoint.
+- **CDN:** serves cached static files near users and reduces origin traffic.
+- **Load balancer:** routes API requests to healthy application instances.
+- **Application servers:** run the API and allow horizontal scaling.
+- **API service:** authenticates users, checks ownership, validates input, and applies business rules.
+- **Cache:** reduces repeat database reads. Private data keys must include the user identity.
+- **Primary database:** accepts authoritative writes and enforces data integrity.
+- **Read replica:** can serve eligible reads, subject to replication lag.
+- **Queue and worker:** handle non-essential background jobs outside the request path.
+- **Monitoring, backups, and recovery procedures:** help detect, diagnose, and recover from failures.
+
+## 6. Read flow: `GET /notes`
+
+1. The client sends an HTTPS request to the API domain.
+2. DNS and the load balancer route the request to a healthy application instance.
+3. The API validates the access token and identifies the user.
+4. The API checks a cache key scoped to that user and the filters or cursor.
+5. On a cache miss, the API reads from a replica when its freshness is acceptable; otherwise it reads from the primary.
+6. The API returns only that user's notes in a stable, paginated order and may cache the result for a controlled period.
+7. Monitoring records latency, status, and relevant metrics without recording secrets.
+
+## 7. Write flow: `POST /notes`
+
+1. The client sends JSON over HTTPS.
+2. The API authenticates the user and validates the title and body.
+3. In a transaction, the API writes the note to the primary database with the authenticated user's ID.
+4. After commit, the API invalidates or updates affected cache entries.
+5. If extra work is needed, the API publishes a background job and returns `201 Created` with the new note.
+6. A worker handles the job independently, with idempotency, bounded retries, and monitoring.
+
+The API must not report successful creation before the database commit succeeds. A transactional outbox can help reliably coordinate a database write and publishing a queue event.
+
+## 8. Trade-offs
+
+- **Cache freshness and speed:** caching lowers latency and database load but can return stale data. Use justified time-to-live values, invalidate affected keys after writes, and scope private keys to users.
+- **Read replicas and consistency:** replicas spread read load but can lag. Use the primary or a consistency-aware approach for read-after-write requests.
+- **Queues and immediate completion:** queues absorb bursts and keep slow tasks off the request path, but jobs can be delayed or retried. Make workers idempotent and monitor failed jobs.
+- **Availability and cost:** multiple instances, replicas, backups, and failure zones improve resilience but raise cost and complexity. Scale according to measured demand and service objectives.
+
+## 9. Reducing single points of failure
+
+- Run at least two application instances across separate failure zones and use health checks.
+- Use highly available load balancing and redundant DNS.
+- Configure database failover, backups, and point-in-time recovery; test restoration.
+- Use a durable queue with retry limits and monitoring.
+- Keep the database as the source of truth; the cache must not be required for correctness.
+- Monitor service health and practice recovery procedures.
+
+Redundancy reduces the impact of individual failures but cannot guarantee zero downtime. Recovery procedures need regular testing.
